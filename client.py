@@ -1,21 +1,17 @@
 #import to calculate SHA-256 hashes
 import hashlib
-
 #import to extract nonce from server's challenge
 import re
-
 #import to send HTTP reqs
 import urllib.request
-
 #imports to handle HTTP + connection errs
 from urllib.error import HTTPError, URLError
 
 
 def send_request(url, authorisation=None):
-    #create HTTP GET req for requested URL
+    #create HTTP GET req for requested URL + add Authorisation header if authentication info is provided
     request = urllib.request.Request(url, method="GET")
 
-    #add Authorisation header if authentication info is provided
     if authorisation is not None:
         request.add_header("Authorization", authorisation)
 
@@ -37,14 +33,10 @@ def send_request(url, authorisation=None):
             error.read()
         )
 
-
 def start_client():
-    #ask user which resource they want to retrieve
-    url = input(
-        "Enter the URL (press Enter for homepage): "
-    ).strip()
+    #ask for page URL using local server homepage by default
+    url = input("Enter the URL (press Enter for homepage): ").strip()
 
-    #use local server homepage if the user enters no URL
     if not url:
         url = "http://127.0.0.1:8080/"
 
@@ -52,7 +44,7 @@ def start_client():
     username = input("Username: ")
     password = input("Password: ")
 
-    #send first req w/o authentication -> server should respond with 401 Digest challenge
+    #make initial req to receive the server's Digest challenge
     status, headers, body = send_request(url)
 
     #stop if server did not issue an authentication challenge
@@ -61,19 +53,15 @@ def start_client():
         print(body.decode("utf-8", errors="replace"))
         return
 
-    #read authentication challenge from response headers
-    challenge = headers.get("WWW-Authenticate", "")
-
     #extract nonce from the Digest challenge
+    challenge = headers.get("WWW-Authenticate", "")
     match = re.search(r'nonce="([^"]+)"', challenge)
 
-    #check that the challenge uses Digest + includes a nonce
     if not challenge.lower().startswith("digest ") or not match:
         print("The server did not provide a valid Digest challenge.")
         print(f"HTTP status: {status}")
         return
 
-    #save the nonce provided by the server
     nonce = match.group(1)
 
     #hash password using SHA-256
@@ -96,10 +84,7 @@ def start_client():
     #retry the req w the calculated authentication response
     status, headers, body = send_request(url, authorisation)
 
-    #display the final HTTP status code
     print(f"HTTP status: {status}")
-
-    #display returned page content
     print(body.decode("utf-8", errors="replace"))
 
 
