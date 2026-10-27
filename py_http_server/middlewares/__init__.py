@@ -6,3 +6,5 @@ from .default import *
 from .virtual_host import *
 from .enforce_https import *
 from .rewrite_redirects import *
+from .digest_auth import*
+from .digest_auth_subverted import*
