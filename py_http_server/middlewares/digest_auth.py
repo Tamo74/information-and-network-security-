@@ -8,13 +8,6 @@ from ..networking import ConnectionInfo
 
 
 class DigestAuthMiddleware(RequestHandlerABC):
-    """
-    Secure HTTP Digest Authentication middleware.
-
-    Password file format: one 'username:sha256hash' pair per line,
-    where sha256hash = SHA256(plaintext_password) as hex digest.
-    """
-
     def __init__(self, next: RequestHandler, pwdfile: str):
         self.next = next
         self.http = HTTPResponseFactory(NO_CACHE_HEADERS)
@@ -31,7 +24,6 @@ class DigestAuthMiddleware(RequestHandlerABC):
 
         # Track the nonce(s) we've issued, so we can verify a client's
         # response was actually computed against a nonce we handed out
-        # (basic protection against replaying a captured credential blindly).
         self._issued_nonces = set()
 
     def __new_nonce(self) -> str:
@@ -50,8 +42,6 @@ class DigestAuthMiddleware(RequestHandlerABC):
             return {}
 
         fields = {}
-        # strip the leading "Digest " and split on commas, being tolerant
-        # of quoted values
         remainder = header_value[len("digest "):]
         for part in remainder.split(","):
             if "=" not in part:
@@ -61,17 +51,6 @@ class DigestAuthMiddleware(RequestHandlerABC):
         return fields
 
     def __verify_authorization(self, header_value: str) -> bool:
-        """
-        Verify a Digest Authorization header against the loaded user
-        database.
-
-        Expected fields in the header: username, nonce, response.
-
-        Verification logic:
-            expected_response = SHA256(stored_password_hash + ":" + nonce)
-        and we check it matches the 'response' field the client sent, for
-        a nonce that this server actually issued.
-        """
         fields = self.__parse_digest_header(header_value)
 
         username = fields.get("username")
@@ -85,15 +64,14 @@ class DigestAuthMiddleware(RequestHandlerABC):
         if username not in self.users:
             return False
 
-        # Reject nonces we never issued (defends against trivially replayed
-        # or fabricated requests)
+        # reject nonces that were never issued defending against trivially replayed or fabricated requests
         if nonce not in self._issued_nonces:
             return False
 
         stored_hash = self.users[username]
         expected = hashlib.sha256(f"{stored_hash}:{nonce}".encode()).hexdigest()
 
-        # Constant-time comparison to avoid leaking timing information
+        # constant time comparison to avoid leaking timing information
         return secrets.compare_digest(expected, response)
 
     def __call__(self, conn_info: ConnectionInfo, request: HTTPRequest):
@@ -102,7 +80,7 @@ class DigestAuthMiddleware(RequestHandlerABC):
         ):
             return self.next(conn_info, request)
 
-        # Issue a fresh nonce with every challenge
+        # issue a fresh nonce with every challenge
         nonce = self.__new_nonce()
         return self.http.status(
             401,
